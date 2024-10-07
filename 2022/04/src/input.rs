@@ -1,4 +1,6 @@
-use core::convert::Infallible;
+use core::error::Error;
+use core::fmt::Display;
+use core::num::ParseIntError;
 use core::str::FromStr;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -23,19 +25,44 @@ impl Range {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParseRangeError {
+    InvalidFormat(String),
+    ParseStart(ParseIntError),
+    ParseEnd(ParseIntError),
+}
+
+impl Display for ParseRangeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::InvalidFormat(ref line) => {
+                write!(f, "invalid format for range: {}", line)
+            }
+            Self::ParseStart(_) => write!(f, "failed to parse start of range"),
+            Self::ParseEnd(_) => write!(f, "failed to parse end of range"),
+        }
+    }
+}
+
+impl Error for ParseRangeError {
+    fn cause(&self) -> Option<&dyn Error> {
+        match *self {
+            Self::InvalidFormat(_) => None,
+            Self::ParseStart(ref err) => Some(err),
+            Self::ParseEnd(ref err) => Some(err),
+        }
+    }
+}
+
 impl FromStr for Range {
-    type Err = Infallible;
+    type Err = ParseRangeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let Some((start, end)) = s.split_once('-') else {
-            unreachable!();
+            return Err(ParseRangeError::InvalidFormat(s.to_string()));
         };
-        let Ok(start) = start.parse() else {
-            unreachable!();
-        };
-        let Ok(end) = end.parse() else {
-            unreachable!();
-        };
+        let start = start.parse().map_err(ParseRangeError::ParseStart)?;
+        let end = end.parse().map_err(ParseRangeError::ParseEnd)?;
         Ok(Self { start, end })
     }
 }
@@ -45,21 +72,45 @@ pub struct Input {
     pub section_assignments_pairs: Vec<(Range, Range)>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParseInputError {
+    InvalidFormat(String),
+    ParseRange(ParseRangeError),
+}
+
+impl Display for ParseInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::InvalidFormat(ref line) => {
+                write!(f, "invalid format for input line: {}", line)
+            }
+            Self::ParseRange(_) => {
+                write!(f, "failed to parse range")
+            }
+        }
+    }
+}
+
+impl Error for ParseInputError {
+    fn cause(&self) -> Option<&dyn Error> {
+        match *self {
+            Self::InvalidFormat(_) => None,
+            Self::ParseRange(ref err) => Some(err),
+        }
+    }
+}
+
 impl FromStr for Input {
-    type Err = Infallible;
+    type Err = ParseInputError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut section_assignments_pairs = Vec::new();
         for line in s.lines() {
             let Some((left, right)) = line.split_once(',') else {
-                unreachable!();
+                return Err(ParseInputError::InvalidFormat(line.to_string()));
             };
-            let Ok(left) = left.parse() else {
-                unreachable!();
-            };
-            let Ok(right) = right.parse() else {
-                unreachable!();
-            };
+            let left = left.parse().map_err(ParseInputError::ParseRange)?;
+            let right = right.parse().map_err(ParseInputError::ParseRange)?;
             section_assignments_pairs.push((left, right));
         }
         Ok(Self {
