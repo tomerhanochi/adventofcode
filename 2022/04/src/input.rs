@@ -54,8 +54,12 @@ impl FromStr for Input {
             let Some((left, right)) = line.split_once(',') else {
                 unreachable!();
             };
-            let Ok(left) = left.parse();
-            let Ok(right) = right.parse();
+            let Ok(left) = left.parse() else {
+                unreachable!();
+            };
+            let Ok(right) = right.parse() else {
+                unreachable!();
+            };
             section_assignments_pairs.push((left, right));
         }
         Ok(Self {
