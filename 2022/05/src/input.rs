@@ -1,62 +1,76 @@
-use core::convert::Infallible;
 use core::str::FromStr;
+use std::error::Error;
+use std::fmt::Display;
+use std::num::ParseIntError;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Instruction {
-    pub quantity: usize,
-    pub source: usize,
-    pub target: usize,
+pub struct Stacks(Vec<Vec<char>>);
+
+#[cfg(test)]
+impl Stacks {
+    pub fn new(stacks: Vec<Vec<char>>) -> Self {
+        Self(stacks)
+    }
 }
 
-impl FromStr for Instruction {
-    type Err = Infallible;
+impl Deref for Stacks {
+    type Target = Vec<Vec<char>>;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split(" ").collect::<Vec<_>>()[..] {
-            ["move", quantity, "from", source, "to", target] => {
-                Ok(Instruction {
-                    quantity: quantity
-                        .parse()
-                        .expect("Quantity should be valid"),
-                    source: source
-                        .parse::<usize>()
-                        .expect("Source should be valid.")
-                        - 1,
-                    target: target
-                        .parse::<usize>()
-                        .expect("Target should be valid.")
-                        - 1,
-                })
-            }
-            _ => unreachable!(),
-        }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Stacks {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Input {
-    pub stacks: Vec<Vec<char>>,
-    pub instructions: Vec<Instruction>,
+pub enum ParseStacksError {
+    Empty,
+    MissingIndex,
+    ParseIndex(ParseIntError),
 }
 
-impl FromStr for Input {
-    type Err = Infallible;
+impl Display for ParseStacksError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::Empty => write!(f, "cannot parse stacks from empty string"),
+            Self::MissingIndex => {
+                write!(f, "cannot parse stacks with missing index")
+            }
+            Self::ParseIndex(_) => write!(f, "failed to parse index"),
+        }
+    }
+}
+
+impl Error for ParseStacksError {
+    fn cause(&self) -> Option<&dyn Error> {
+        match *self {
+            Self::Empty => None,
+            Self::MissingIndex => None,
+            Self::ParseIndex(ref err) => Some(err),
+        }
+    }
+}
+
+impl FromStr for Stacks {
+    type Err = ParseStacksError;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some((stacks, instructions)) =
-            s.trim_matches('\n').split_once("\n\n")
-        else {
-            unreachable!();
-        };
-        let stacks_count = stacks
+        let stacks_count = s
             .lines()
             .last()
-            .expect("Stacks should have at least 1 line")
+            .ok_or(ParseStacksError::Empty)?
             .split_whitespace()
             .last()
-            .expect("Stacks should have at least 1 index")
+            .ok_or(ParseStacksError::MissingIndex)?
             .parse()
-            .expect("Stacks indecies should be numbers");
-        let stacks = stacks.lines().rev().skip(1).fold(
+            .map_err(ParseStacksError::ParseIndex)?;
+        Ok(Self(s.lines().rev().skip(1).fold(
             (0..stacks_count).map(|_| Vec::new()).collect::<Vec<_>>(),
             |mut acc, line| {
                 for (stack_idx, package) in line
@@ -72,14 +86,132 @@ impl FromStr for Input {
                 }
                 acc
             },
-        );
+        )))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Instruction {
+    pub quantity: usize,
+    pub source: usize,
+    pub target: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParseInstructionError {
+    InvalidFormat(String),
+    ParseQuantity(ParseIntError),
+    ParseSource(ParseIntError),
+    ParseTarget(ParseIntError),
+}
+
+impl Display for ParseInstructionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::InvalidFormat(ref line) => {
+                write!(f, "invalid format for instruction: {}", line)
+            }
+            Self::ParseQuantity(_) => write!(f, "failed to parse quantity"),
+            Self::ParseSource(_) => write!(f, "failed to parse source"),
+            Self::ParseTarget(_) => write!(f, "failed to parse target"),
+        }
+    }
+}
+
+impl Error for ParseInstructionError {
+    fn cause(&self) -> Option<&dyn Error> {
+        match *self {
+            Self::InvalidFormat(_) => None,
+            Self::ParseQuantity(ref err) => Some(err),
+            Self::ParseSource(ref err) => Some(err),
+            Self::ParseTarget(ref err) => Some(err),
+        }
+    }
+}
+
+impl FromStr for Instruction {
+    type Err = ParseInstructionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split(" ").collect::<Vec<_>>()[..] {
+            ["move", quantity, "from", source, "to", target] => {
+                Ok(Instruction {
+                    quantity: quantity
+                        .parse()
+                        .map_err(ParseInstructionError::ParseQuantity)?,
+                    source: source
+                        .parse::<usize>()
+                        .map_err(ParseInstructionError::ParseSource)?
+                        - 1,
+                    target: target
+                        .parse::<usize>()
+                        .map_err(ParseInstructionError::ParseTarget)?
+                        - 1,
+                })
+            }
+            _ => Err(ParseInstructionError::InvalidFormat(s.to_string())),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Input {
+    pub stacks: Stacks,
+    pub instructions: Vec<Instruction>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParseInputError {
+    InvalidFormat,
+    ParseStacks(ParseStacksError),
+    ParseInstructions(ParseInstructionError),
+}
+
+impl Display for ParseInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::InvalidFormat => {
+                write!(f, "cannot parse input with invalid format")
+            }
+            Self::ParseStacks(_) => write!(f, "cannot parse stacks"),
+            Self::ParseInstructions(_) => {
+                write!(f, "cannot parse instructions")
+            }
+        }
+    }
+}
+
+impl Error for ParseInputError {
+    fn cause(&self) -> Option<&dyn Error> {
+        match *self {
+            Self::InvalidFormat => None,
+            Self::ParseStacks(ref err) => Some(err),
+            Self::ParseInstructions(ref err) => Some(err),
+        }
+    }
+}
+
+impl FromStr for Input {
+    type Err = ParseInputError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (stacks, instructions) = s
+            .trim_matches('\n')
+            .split_once("\n\n")
+            .ok_or(ParseInputError::InvalidFormat)?;
+
+        let stacks = stacks
+            .parse::<Stacks>()
+            .map_err(ParseInputError::ParseStacks)?;
 
         let instructions = instructions
             .lines()
             .map(|instruction| {
-                instruction.parse().expect("Instruction should be valid")
+                instruction
+                    .parse()
+                    .map_err(ParseInputError::ParseInstructions)
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         Ok(Input {
             stacks,
             instructions,
@@ -155,11 +287,11 @@ move 3 from 1 to 3
 move 2 from 2 to 1
 move 1 from 1 to 2",
             expected: Ok(Input {
-                stacks: vec![
+                stacks: Stacks::new(vec![
                     (vec!['Z', 'N']),
                     (vec!['M', 'C', 'D']),
                     (vec!['P']),
-                ],
+                ]),
                 instructions: vec![
                     Instruction {
                         quantity: 1,

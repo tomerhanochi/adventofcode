@@ -21,7 +21,7 @@ pub fn solve(input: &Input) -> Output {
 
 #[cfg(test)]
 mod tests {
-    use crate::input::Instruction;
+    use crate::input::{Instruction, Stacks};
 
     use super::*;
 
@@ -33,11 +33,11 @@ mod tests {
         }
         let test_cases = [TestCase {
             input: Input {
-                stacks: vec![
+                stacks: Stacks::new(vec![
                     (vec!['Z', 'N']),
                     (vec!['M', 'C', 'D']),
                     (vec!['P']),
-                ],
+                ]),
                 instructions: vec![
                     Instruction {
                         quantity: 1,
