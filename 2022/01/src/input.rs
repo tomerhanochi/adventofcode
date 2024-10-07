@@ -1,12 +1,35 @@
-use std::str::FromStr;
+use core::{error::Error, fmt::Display, num::ParseIntError, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Input {
     pub calories_nested_list: Vec<Vec<u64>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParseInputError {
+    ParseCalories(ParseIntError),
+}
+
+impl Display for ParseInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            ParseInputError::ParseCalories(ref err) => {
+                write!(f, "failed to parse calories: {}", err)
+            }
+        }
+    }
+}
+
+impl Error for ParseInputError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            ParseInputError::ParseCalories(ref err) => Some(err),
+        }
+    }
+}
+
 impl FromStr for Input {
-    type Err = <u64 as FromStr>::Err;
+    type Err = ParseInputError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut calories_nested_list = Vec::new();
@@ -16,7 +39,9 @@ impl FromStr for Input {
                 calories_nested_list.push(calories_list);
                 calories_list = Vec::new();
             } else {
-                let calories = line.parse::<u64>()?;
+                let calories = line
+                    .parse::<u64>()
+                    .map_err(ParseInputError::ParseCalories)?;
                 calories_list.push(calories)
             }
         }
@@ -35,8 +60,8 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        struct TestCase<'a> {
-            input: &'a str,
+        struct TestCase {
+            input: &'static str,
             expected: Result<Input, <Input as FromStr>::Err>,
         }
         let test_cases = [TestCase {
